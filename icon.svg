@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="100" fill="#1a0b2e"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c89bdb"/>
+      <stop offset="50%" stop-color="#f3e9f7"/>
+      <stop offset="100%" stop-color="#7ce0c9"/>
+    </linearGradient>
+  </defs>
+  <!-- cheveux -->
+  <path d="M218 110 Q256 60 294 110 Q320 145 316 190 Q336 230 332 300 Q326 340 318 370 Q330 340 328 300 Q330 260 324 210 Q318 170 308 148 Q290 120 256 116 Q222 120 204 148 Q194 170 188 210 Q182 260 184 300 Q182 340 194 370 Q186 340 180 300 Q176 230 196 190 Q192 145 218 110Z" fill="url(#g)" opacity="0.8"/>
+  <!-- visage -->
+  <ellipse cx="256" cy="192" rx="52" ry="62" fill="url(#g)" opacity="0.9"/>
+  <!-- corps -->
+  <path d="M208 248 Q256 236 304 248 Q328 270 324 330 Q320 375 304 410 Q330 445 336 510 L296 510 L256 412 L216 510 L176 510 Q182 445 208 410 Q192 375 188 330 Q184 270 208 248Z" fill="url(#g)" opacity="0.85"/>
+  <!-- bras gauche -->
+  <path d="M200 262 Q168 300 160 360 L178 356 Q186 300 204 268Z" fill="url(#g)" opacity="0.7"/>
+  <!-- bras droit -->
+  <path d="M312 262 Q344 300 352 360 L334 356 Q326 300 308 268Z" fill="url(#g)" opacity="0.7"/>
+</svg>

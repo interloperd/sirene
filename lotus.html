@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Lotus" />
+  <title>Espace Lotus — Sirène</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>* { box-sizing: border-box; margin: 0; padding: 0; } body { background: #1a0b2e; } ::-webkit-scrollbar { width: 0; }</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback } = React;
+
+    const C = {
+      abysse: "#1a0b2e", abysse2: "#2d1245", violet: "#6b2d9c",
+      orchidee: "#a855c4", lilas: "#c89bdb", nacre: "#f3e9f7",
+      ecaille: "#7ce0c9", or: "#e8c87a", lotus: "#f0a0c0",
+      vert: "#8ee8a8", rouge: "#f08080", ligne: "rgba(200,155,219,0.22)",
+    };
+
+    const LOTUS_KEY  = "lotus_besoins_v1";
+    const TRACK_KEY  = "lotus_tracker_v1";
+    const RITUEL_KEY = "rituel_data_v5";
+
+    const PRIO = {
+      essentiel:  { label: "Essentiel",   color: C.rouge },
+      recommande: { label: "Recommandé",  color: C.or    },
+      bonus:      { label: "Bonus",       color: C.lilas },
+    };
+    const CAT_EMOJI = { peau: "✨", cheveux: "💆", corps: "🌿", santé: "🫀" };
+    const FREQS = ["quotidien", "2x semaine", "3x semaine", "hebdomadaire", "mensuel"];
+    const ZONE_LABELS = { cheveux:"Cheveux", yeux:"Yeux", levres:"Lèvres", peau:"Peau", buste:"Corps", mains:"Mains", jambes:"Jambes" };
+
+    const LOTUS_SEED = [
+      { id:"l01", emoji:"🍋", nom:"Vitamine C", detail:"Anti-oxydant puissant. Éclat, unification du teint, protection contre les radicaux libres et stimulation du collagène.", cat:"peau", priorite:"essentiel", freq:"quotidien", keywords:["vitamine c","vitamin c","ascorbic","ascorbique","l-ascorbic","sérum vitamine"], note:"Appliquer le matin avant la crème solaire pour maximiser l'effet anti-oxydant.", custom:false, lies:[] },
+      { id:"l02", emoji:"🌞", nom:"Protection UV (SPF)", detail:"Première protection anti-âge. Protège des UVA/UVB, des taches et du vieillissement cutané prématuré.", cat:"peau", priorite:"essentiel", freq:"quotidien", keywords:["spf","solaire","sunscreen","uv","fps","fluide","avène","avene"], note:"Indice UV > 3 → SPF 50+ obligatoire. Renouveler toutes les 2h en extérieur.", custom:false, lies:[] },
+      { id:"l03", emoji:"💧", nom:"Hydratation cutanée", detail:"Maintien de la barrière hydrolipidique. Peau rebondie, confort et protection contre les agressions extérieures.", cat:"peau", priorite:"essentiel", freq:"quotidien", keywords:["hydrat","moistur","toleriane","hyaluron","glycérin","crème","lotion","roche-posay"], note:"", custom:false, lies:[] },
+      { id:"l04", emoji:"🫧", nom:"Nettoyage & Démaquillage", detail:"Élimination des impuretés, sébum et résidus de maquillage. Base essentielle pour l'efficacité de tous les soins.", cat:"peau", priorite:"essentiel", freq:"quotidien", keywords:["micell","démaquill","nettoy","cleansing","cleanser","bioderma","sensibio","eau"], note:"Toujours le soir. Double nettoyage recommandé si port de maquillage.", custom:false, lies:[] },
+      { id:"l05", emoji:"🔬", nom:"Niacinamide / Vit. B3", detail:"Régulation du sébum, réduction des pores, unification du teint et renforcement de la barrière cutanée.", cat:"peau", priorite:"recommande", freq:"quotidien", keywords:["niacinamide","vitamine b3","vitamin b3","b3","niacin","ordinary"], note:"Compatible avec la plupart des actifs. Éviter avec la vitamine C pure à haute dose.", custom:false, lies:[] },
+      { id:"l06", emoji:"⏳", nom:"Rétinol / Rétinoides", detail:"Anti-âge puissant. Stimulation du collagène, renouvellement cellulaire accéléré, atténuation des rides.", cat:"peau", priorite:"recommande", freq:"3x semaine", keywords:["retinol","rétinol","retinoid","rétinoïde","a-retinol","bakuchiol"], note:"Soir uniquement. Suivi d'une crème hydratante. Éviter avec AHA/BHA le même soir.", custom:false, lies:[] },
+      { id:"l07", emoji:"🌀", nom:"Exfoliation (AHA / BHA)", detail:"Élimination des cellules mortes, désobstruction des pores, éclat et amélioration de l'absorption des actifs.", cat:"peau", priorite:"recommande", freq:"2x semaine", keywords:["gommage","exfoliant","aha","bha","glycolic","salicylic","acide","peel","exfoliat","bum bum"], note:"Toujours suivi de SPF le lendemain matin. Max 2–3x/semaine.", custom:false, lies:[] },
+      { id:"l08", emoji:"👁", nom:"Contour des yeux", detail:"Zone 10x plus fine que le reste du visage. Soin spécifique anti-poches, anti-cernes et anti-rides patte d'oie.", cat:"peau", priorite:"recommande", freq:"quotidien", keywords:["yeux","eye","contour","cernes","poches","caudalie","resvérat"], note:"Appliquer en tapotant doucement avec l'annulaire, jamais de frottement.", custom:false, lies:[] },
+      { id:"l09", emoji:"💜", nom:"Collagène & Fermeté", detail:"Stimulation du collagène naturel pour maintenir l'élasticité, la fermeté et prévenir le relâchement cutané.", cat:"peau", priorite:"bonus", freq:"2x semaine", keywords:["collagène","collagen","fermeté","peptide","capture","caudalie","magic cream"], note:"", custom:false, lies:[] },
+      { id:"l10", emoji:"🫒", nom:"Vitamine E & Antioxydants", detail:"Protège les lipides de la peau contre l'oxydation. Synergie puissante avec la Vitamine C.", cat:"peau", priorite:"bonus", freq:"quotidien", keywords:["vitamine e","vitamin e","tocophérol","tocopherol","antioxydant","huile prodigieuse","nuxe"], note:"", custom:false, lies:[] },
+      { id:"l11", emoji:"💦", nom:"Hydratation capillaire", detail:"Maintien de l'hydratation de la fibre capillaire. Prévient la casse, les frisottis et la sécheresse.", cat:"cheveux", priorite:"essentiel", freq:"2x semaine", keywords:["masque","huile capill","boucles","cantu","moisture","hydrat capill","moroccanoil","curl"], note:"Toujours appliquer après le shampooing. Laisser poser 5–10 min minimum.", custom:false, lies:[] },
+      { id:"l12", emoji:"🧬", nom:"Protéines capillaires", detail:"Reconstruction de la kératine. Force, résistance à la casse et brillance des cheveux abîmés.", cat:"cheveux", priorite:"recommande", freq:"1x semaine", keywords:["olaplex","protein","protéin","bond","kératin","keratin","résistance","réparateur"], note:"Ne pas surprotéiner : alterner avec les soins hydratants pour éviter la rigidité.", custom:false, lies:[] },
+      { id:"l13", emoji:"💧", nom:"Définition & Anti-frizz", detail:"Préservation des boucles, anti-humidité et maintien de la définition tout au long de la journée.", cat:"cheveux", priorite:"recommande", freq:"quotidien", keywords:["curl cream","crème boucles","cantu","définit","frizz","activateur","styler"], note:"", custom:false, lies:[] },
+      { id:"l14", emoji:"🌿", nom:"Hydratation corps", detail:"Nourrit la peau après la douche, maintient l'élasticité et prévient la sécheresse et les tiraillements.", cat:"corps", priorite:"essentiel", freq:"quotidien", keywords:["lait corps","body","nuxe","beurre","karité","shea","rêve de miel","weleda","bouleau"], note:"Appliquer sur peau encore légèrement humide pour maximiser l'absorption.", custom:false, lies:[] },
+      { id:"l15", emoji:"✋", nom:"Soin des mains", detail:"Les mains trahissent l'âge. Crème nourrissante après chaque lavage et soin des cuticules régulier.", cat:"corps", priorite:"recommande", freq:"quotidien", keywords:["main","hand","occitane","karité","cuticule","mavala","crème mains"], note:"", custom:false, lies:[] },
+      { id:"l16", emoji:"🦵", nom:"Soin des jambes", detail:"Légèreté, hydratation et traitement des inégalités de peau. Drainage et confort au quotidien.", cat:"corps", priorite:"recommande", freq:"quotidien", keywords:["jambes","bouleau","weleda","pieds","neutrogena","baume","circulation"], note:"", custom:false, lies:[] },
+    ];
+
+    const todayKey = () => new Date().toISOString().split("T")[0];
+    const last7Keys = () => Array.from({length:7}, (_,i) => { const d = new Date(); d.setDate(d.getDate()-6+i); return d.toISOString().split("T")[0]; });
+    const fmtDay = (iso) => { const d = new Date(iso+"T12:00:00"); return d.toLocaleDateString("fr-FR",{weekday:"short"}); };
+    const fmtFull = (d) => d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+
+    function App() {
+      const [besoins, setBesoins]   = useState(LOTUS_SEED);
+      const [rituel, setRituel]     = useState({});
+      const [tracker, setTracker]   = useState({});
+      const [screen, setScreen]     = useState("besoins");
+      const [catFilter, setCatFilter] = useState("tous");
+      const [selected, setSelected] = useState(null);
+      const [editNote, setEditNote] = useState(null);
+      const [newB, setNewB]         = useState(null);
+      const [loaded, setLoaded]     = useState(false);
+
+      useEffect(() => {
+        try { const b = localStorage.getItem(LOTUS_KEY); if (b) setBesoins(JSON.parse(b)); } catch {}
+        try { const r = localStorage.getItem(RITUEL_KEY); if (r) setRituel(JSON.parse(r)); } catch {}
+        try { const t = localStorage.getItem(TRACK_KEY); if (t) setTracker(JSON.parse(t)); } catch {}
+        setLoaded(true);
+      }, []);
+
+      const persistB = useCallback((next) => { setBesoins(next); try { localStorage.setItem(LOTUS_KEY, JSON.stringify(next)); } catch {} }, []);
+      const persistT = useCallback((next) => { setTracker(next); try { localStorage.setItem(TRACK_KEY, JSON.stringify(next)); } catch {} }, []);
+
+      // Flat products from rituel
+      const allProds = useMemo(() => {
+        const out = [];
+        Object.entries(rituel).forEach(([zk, z]) => z.items?.forEach(it => out.push({ ...it, zk, zlabel: ZONE_LABELS[zk]||zk })));
+        return out;
+      }, [rituel]);
+
+      const autoMatch = (b) => {
+        const kw = b.keywords.map(k => k.toLowerCase());
+        return allProds.filter(p => kw.some(k => (p.nom+" "+p.ref).toLowerCase().includes(k)));
+      };
+
+      const getLinked = (b) => {
+        const auto = autoMatch(b);
+        const autoIds = new Set(auto.map(p => p.id));
+        const manual = (b.lies||[]).map(id => allProds.find(p => p.id===id)).filter(Boolean).filter(p => !autoIds.has(p.id));
+        return [...auto, ...manual];
+      };
+
+      // "covered" = linked product in matin or soir routine
+      // "linked"  = product exists but not in active routine
+      // "missing" = no product linked
+      const getCov = (b) => {
+        const linked = getLinked(b);
+        if (!linked.length) return "missing";
+        return linked.some(p => p.routines?.matin || p.routines?.soir) ? "covered" : "linked";
+      };
+
+      const COV = {
+        covered: { label: "Couvert ✓",         color: C.vert,  bg: `${C.vert}20`  },
+        linked:  { label: "Produit non actif ⚠", color: C.or,   bg: `${C.or}20`   },
+        missing: { label: "Non couvert ✗",      color: C.rouge, bg: `${C.rouge}20` },
+      };
+
+      const today = todayKey();
+      const todayLog = tracker[today] || {};
+
+      const toggleToday = (id) => {
+        const next = { ...tracker, [today]: { ...todayLog, [id]: !todayLog[id] } };
+        persistT(next);
+      };
+
+      const toggleLie = (bid, pid) => {
+        persistB(besoins.map(b => {
+          if (b.id !== bid) return b;
+          const lies = b.lies||[];
+          return { ...b, lies: lies.includes(pid) ? lies.filter(id => id!==pid) : [...lies, pid] };
+        }));
+      };
+
+      const updateNote = (id, note) => { persistB(besoins.map(b => b.id===id ? {...b,note} : b)); setEditNote(null); };
+
+      const removeBesoin = (id) => { persistB(besoins.filter(b => b.id!==id)); if (selected===id) setSelected(null); };
+
+      const addBesoin = () => {
+        if (!newB?.nom?.trim()) return;
+        const b = { id:"c"+Date.now(), emoji:newB.emoji||CAT_EMOJI[newB.cat]||"⭐", nom:newB.nom.trim(), detail:newB.detail?.trim()||"", cat:newB.cat||"peau", priorite:newB.priorite||"recommande", freq:newB.freq||"quotidien", keywords:(newB.keywords||"").split(",").map(k=>k.trim().toLowerCase()).filter(Boolean), note:newB.note?.trim()||"", custom:true, lies:[] };
+        persistB([...besoins, b]);
+        setNewB(null); setScreen("besoins");
+      };
+
+      const totalCovered = besoins.filter(b => getCov(b)==="covered").length;
+      const pctGlobal = besoins.length ? Math.round(totalCovered/besoins.length*100) : 0;
+
+      const dayStat = (dayKey) => {
+        const log = tracker[dayKey]||{};
+        return besoins.filter(b => getCov(b)==="covered" || !!log[b.id]).length;
+      };
+
+      if (!loaded) return null;
+
+      const inp = { background:"rgba(255,255,255,0.07)", border:`1px solid ${C.ligne}`, color:C.nacre, borderRadius:10, padding:"9px 11px", fontSize:13, fontFamily:"inherit", outline:"none", width:"100%" };
+
+      const filteredB = catFilter==="tous" ? besoins : besoins.filter(b => b.cat===catFilter);
+      const groups = [
+        { key:"essentiel",  label:"Essentiels",   items: filteredB.filter(b=>b.priorite==="essentiel")  },
+        { key:"recommande", label:"Recommandés",  items: filteredB.filter(b=>b.priorite==="recommande") },
+        { key:"bonus",      label:"Bonus",         items: filteredB.filter(b=>b.priorite==="bonus")      },
+      ].filter(g=>g.items.length);
+
+      const selB = besoins.find(b => b.id===selected);
+
+      return (
+        <div style={{ minHeight:"100vh", background:`radial-gradient(120% 80% at 50% -10%, ${C.violet}22, transparent), linear-gradient(${C.abysse}, ${C.abysse2})`, fontFamily:"'Montserrat', system-ui, sans-serif", color:C.nacre, paddingBottom:120 }}>
+          <style>{`
+            @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Montserrat:wght@300;400;500;600&display=swap');
+            * { box-sizing:border-box; }
+            input::placeholder, textarea::placeholder { color:${C.lilas}; opacity:.5; }
+            @keyframes slideUp { from { transform:translateY(20px);opacity:0 } to { transform:translateY(0);opacity:1 } }
+            .panel { animation:slideUp .3s ease; }
+            .card:active { transform:scale(.98); }
+          `}</style>
+
+          {/* ── HEADER ── */}
+          <header style={{ textAlign:"center", padding:"24px 20px 4px", position:"relative" }}>
+            <a href="index.html" style={{ position:"absolute", left:16, top:30, fontSize:12, color:C.lilas, textDecoration:"none", opacity:.7 }}>← Rituel</a>
+            <div style={{ fontSize:11, letterSpacing:4, color:C.lotus, textTransform:"uppercase", marginBottom:4 }}>Espace</div>
+            <h1 style={{ fontFamily:"'Cormorant Garamond', serif", fontStyle:"italic", fontWeight:500, fontSize:38, margin:0, lineHeight:1, background:`linear-gradient(120deg, ${C.lotus}, ${C.nacre}, ${C.ecaille})`, WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>Lotus</h1>
+            <p style={{ fontSize:12, color:C.lilas, fontWeight:300, marginTop:4 }}>Tes besoins organiques · Tracker actifs</p>
+            {/* Score du jour */}
+            <div style={{ marginTop:10, display:"inline-flex", alignItems:"center", gap:10, background:`${C.abysse2}cc`, border:`1px solid ${C.ligne}`, borderRadius:22, padding:"8px 18px" }}>
+              <div style={{ display:"flex", gap:4 }}>
+                {besoins.slice(0,Math.min(besoins.length,8)).map(b => {
+                  const ok = getCov(b)==="covered" || !!todayLog[b.id];
+                  return <div key={b.id} style={{ width:8, height:8, borderRadius:"50%", background: ok ? C.vert : getCov(b)==="linked" ? C.or : C.ligne }} />;
+                })}
+              </div>
+              <div>
+                <div style={{ fontSize:12, color:C.nacre, fontWeight:500 }}>{besoins.filter(b=>getCov(b)==="covered"||!!todayLog[b.id]).length}/{besoins.length} aujourd'hui</div>
+                <div style={{ fontSize:10, color:C.lilas, fontWeight:300 }}>{fmtFull(new Date())}</div>
+              </div>
+              <div style={{ fontFamily:"'Cormorant Garamond', serif", fontSize:26, color:pctGlobal>=70?C.vert:pctGlobal>=40?C.or:C.rouge, fontWeight:500 }}>{pctGlobal}%</div>
+            </div>
+          </header>
+
+          {/* ── TABS ── */}
+          <div style={{ display:"flex", justifyContent:"center", gap:6, padding:"12px 16px 4px" }}>
+            {[["besoins","🌸 Besoins"],["journal","📊 Journal"],["nouveau","＋ Nouveau"]].map(([k,lbl]) => {
+              const on = screen===k;
+              return <button key={k} onClick={()=>{setScreen(k);setSelected(null);}} style={{ padding:"8px 16px", borderRadius:20, cursor:"pointer", fontSize:13, fontWeight:500, border:`1px solid ${on?C.lotus:C.ligne}`, background:on?`${C.lotus}22`:"transparent", color:on?C.lotus:C.lilas }}>{lbl}</button>;
+            })}
+          </div>
+
+          {/* ══ BESOINS ══ */}
+          {screen==="besoins" && (
+            <div className="panel" style={{ maxWidth:540, margin:"0 auto", padding:"10px 16px" }}>
+              {/* Légende */}
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:10 }}>
+                {Object.entries(COV).map(([k,v]) => (
+                  <div key={k} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                    <div style={{ width:8, height:8, borderRadius:"50%", background:v.color }} />
+                    <span style={{ fontSize:10, color:C.lilas }}>{v.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Filtre catégorie */}
+              <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:8, marginBottom:10 }}>
+                {["tous","peau","cheveux","corps","santé"].map(c => {
+                  const on = catFilter===c;
+                  return <button key={c} onClick={()=>setCatFilter(c)} style={{ flexShrink:0, padding:"5px 12px", borderRadius:14, cursor:"pointer", fontSize:12, whiteSpace:"nowrap", border:`1px solid ${on?C.ecaille:C.ligne}`, background:on?`${C.ecaille}22`:"transparent", color:on?C.ecaille:C.lilas }}>{c==="tous"?"Tous":`${CAT_EMOJI[c]} ${c.charAt(0).toUpperCase()+c.slice(1)}`}</button>;
+                })}
+              </div>
+
+              {/* ── Panneau détail besoin sélectionné ── */}
+              {selB && (
+                <div className="panel" style={{ marginBottom:16, background:`linear-gradient(${C.abysse2},${C.violet}22)`, border:`1px solid ${C.lotus}55`, borderRadius:20, padding:18, boxShadow:"0 16px 50px rgba(0,0,0,0.4)" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                    <div>
+                      <div style={{ fontSize:30 }}>{selB.emoji}</div>
+                      <h2 style={{ fontFamily:"'Cormorant Garamond', serif", fontStyle:"italic", fontSize:24, margin:"4px 0 6px", color:C.nacre }}>{selB.nom}</h2>
+                      <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                        <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, border:`1px solid ${PRIO[selB.priorite]?.color}`, color:PRIO[selB.priorite]?.color }}>{PRIO[selB.priorite]?.label}</span>
+                        <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, border:`1px solid ${C.ligne}`, color:C.lilas }}>{CAT_EMOJI[selB.cat]} {selB.cat}</span>
+                        <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, border:`1px solid ${C.ligne}`, color:C.lilas }}>🔁 {selB.freq}</span>
+                        <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:COV[getCov(selB)].bg, color:COV[getCov(selB)].color }}>{COV[getCov(selB)].label}</span>
+                      </div>
+                    </div>
+                    <button onClick={()=>setSelected(null)} style={{ background:"transparent", border:`1px solid ${C.ligne}`, color:C.lilas, borderRadius:10, width:32, height:32, cursor:"pointer", fontSize:16 }}>×</button>
+                  </div>
+
+                  <p style={{ fontSize:13, color:C.lilas, fontWeight:300, lineHeight:1.6, marginBottom:12 }}>{selB.detail}</p>
+
+                  {/* Note éditable */}
+                  {editNote?.id===selB.id ? (
+                    <div style={{ marginBottom:12 }}>
+                      <textarea value={editNote.note} onChange={e=>setEditNote({...editNote,note:e.target.value})} style={{ ...inp, resize:"vertical", minHeight:60, marginBottom:6 }} placeholder="Ta note perso (indice UV, fréquence, conseil...)..." />
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button onClick={()=>updateNote(selB.id,editNote.note)} style={{ flex:1, padding:8, background:C.ecaille, color:C.abysse, border:"none", borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:600 }}>Enregistrer</button>
+                        <button onClick={()=>setEditNote(null)} style={{ padding:"8px 12px", background:"transparent", border:`1px solid ${C.ligne}`, color:C.lilas, borderRadius:8, cursor:"pointer", fontSize:12 }}>Annuler</button>
+                      </div>
+                    </div>
+                  ) : selB.note ? (
+                    <div style={{ marginBottom:12, background:`${C.lotus}15`, border:`1px solid ${C.lotus}44`, borderRadius:10, padding:"8px 12px", cursor:"pointer" }} onClick={()=>setEditNote({id:selB.id,note:selB.note})}>
+                      <div style={{ fontSize:10, color:C.lotus, marginBottom:3, textTransform:"uppercase", letterSpacing:1 }}>💡 Note personnelle</div>
+                      <div style={{ fontSize:12, color:C.nacre, fontWeight:300 }}>{selB.note}</div>
+                    </div>
+                  ) : (
+                    <button onClick={()=>setEditNote({id:selB.id,note:""})} style={{ marginBottom:12, background:"transparent", border:`1px dashed ${C.lotus}66`, color:C.lotus, borderRadius:10, padding:"7px 12px", cursor:"pointer", fontSize:12, width:"100%" }}>
+                      💡 Ajouter une note (UV, fréquence, conseil...)
+                    </button>
+                  )}
+
+                  {/* Mots-clés */}
+                  {selB.keywords?.length > 0 && (
+                    <div style={{ marginBottom:12 }}>
+                      <div style={{ fontSize:10, color:C.lilas, textTransform:"uppercase", letterSpacing:1, marginBottom:5 }}>Mots-clés de détection</div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                        {selB.keywords.map(k => <span key={k} style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:`${C.ecaille}22`, color:C.ecaille, border:`1px solid ${C.ecaille}44` }}>{k}</span>)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Produits liés */}
+                  <div style={{ fontSize:10, color:C.ecaille, textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>
+                    Produits liés {allProds.length===0 && <span style={{ color:C.rouge }}>— ouvre d'abord Sirène et ajoute des produits</span>}
+                  </div>
+                  {allProds.length > 0 && (
+                    <div style={{ display:"flex", flexDirection:"column", gap:4, maxHeight:180, overflowY:"auto" }}>
+                      {allProds.map(p => {
+                        const isAuto   = autoMatch(selB).some(a=>a.id===p.id);
+                        const isManual = (selB.lies||[]).includes(p.id);
+                        const linked   = isAuto||isManual;
+                        return (
+                          <div key={p.id} onClick={()=>!isAuto&&toggleLie(selB.id,p.id)}
+                            style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:10, border:`1px solid ${linked?(isAuto?C.ecaille:C.orchidee):C.ligne}`, background:linked?`${isAuto?C.ecaille:C.orchidee}11`:"transparent", cursor:isAuto?"default":"pointer" }}>
+                            <div style={{ width:14, height:14, borderRadius:"50%", border:`1.5px solid ${linked?(isAuto?C.ecaille:C.orchidee):C.ligne}`, background:linked?(isAuto?C.ecaille:C.orchidee):"transparent", flexShrink:0 }} />
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <span style={{ fontSize:12, color:C.nacre }}>{p.nom}</span>
+                              <span style={{ fontSize:11, color:C.lilas, marginLeft:6 }}>{p.ref}</span>
+                              <span style={{ fontSize:10, color:C.lilas, marginLeft:6 }}>({p.zlabel})</span>
+                            </div>
+                            <span style={{ fontSize:10, color:isAuto?C.ecaille:isManual?C.orchidee:C.ligne, flexShrink:0 }}>{isAuto?"auto-détecté":isManual?"lié ×":""}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {selB.custom && (
+                    <button onClick={()=>removeBesoin(selB.id)} style={{ marginTop:12, width:"100%", padding:8, background:"transparent", border:"1px solid rgba(255,150,150,0.3)", color:"#e88", borderRadius:10, cursor:"pointer", fontSize:12 }}>
+                      🗑 Supprimer ce besoin personnalisé
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* ── Cartes groupées par priorité ── */}
+              {groups.map(g => (
+                <div key={g.key} style={{ marginBottom:14 }}>
+                  <div style={{ fontSize:11, letterSpacing:1.5, textTransform:"uppercase", color:PRIO[g.key]?.color||C.lilas, marginBottom:6, display:"flex", alignItems:"center", gap:8 }}>
+                    {g.label}
+                    <span style={{ fontSize:10, color:C.lilas, fontWeight:300 }}>({g.items.filter(b=>getCov(b)==="covered").length}/{g.items.length} couverts)</span>
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {g.items.map(b => {
+                      const cov  = getCov(b);
+                      const ci   = COV[cov];
+                      const lnk  = getLinked(b);
+                      const isSel= selected===b.id;
+                      return (
+                        <div key={b.id} className="card" onClick={()=>setSelected(isSel?null:b.id)}
+                          style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", borderRadius:16, cursor:"pointer", border:`1px solid ${isSel?C.lotus:C.ligne}`, background:isSel?`${C.lotus}11`:`${C.abysse2}88`, transition:"border .2s, background .2s" }}>
+                          <div style={{ fontSize:24, flexShrink:0 }}>{b.emoji}</div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:14, fontWeight:500, color:C.nacre }}>{b.nom}</div>
+                            <div style={{ fontSize:11, color:C.lilas, fontWeight:300, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                              {lnk.length>0 ? lnk.map(p=>p.nom).join(", ") : "Aucun produit lié — tape pour configurer"}
+                            </div>
+                            {b.note && <div style={{ fontSize:10, color:`${C.lotus}cc`, marginTop:2 }}>💡 {b.note.slice(0,50)}{b.note.length>50?"...":""}</div>}
+                          </div>
+                          <div style={{ flexShrink:0, textAlign:"right" }}>
+                            <div style={{ fontSize:10, padding:"3px 8px", borderRadius:8, background:ci.bg, color:ci.color, whiteSpace:"nowrap", fontWeight:500 }}>{ci.label}</div>
+                            <div style={{ fontSize:10, color:C.lilas, marginTop:3 }}>🔁 {b.freq}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ══ JOURNAL ══ */}
+          {screen==="journal" && (
+            <div className="panel" style={{ maxWidth:540, margin:"0 auto", padding:"10px 16px" }}>
+              {/* Historique 7 jours */}
+              <div style={{ marginBottom:18 }}>
+                <div style={{ fontSize:11, color:C.lilas, letterSpacing:1.5, textTransform:"uppercase", marginBottom:8 }}>Historique — 7 derniers jours</div>
+                <div style={{ display:"flex", gap:4 }}>
+                  {last7Keys().map(dk => {
+                    const score = dayStat(dk);
+                    const pct   = besoins.length>0 ? score/besoins.length : 0;
+                    const col   = pct>=0.7?C.vert:pct>=0.4?C.or:pct>0?`${C.rouge}99`:C.ligne;
+                    const isT   = dk===today;
+                    return (
+                      <div key={dk} style={{ flex:1, textAlign:"center" }}>
+                        <div style={{ width:"100%", aspectRatio:"1", borderRadius:10, background:col, border:isT?`2px solid ${C.nacre}`:"none", marginBottom:4, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:C.abysse, opacity:pct===0?0.25:1 }}>
+                          {pct>0?score:""}
+                        </div>
+                        <div style={{ fontSize:9, color:isT?C.nacre:C.lilas, opacity:isT?1:.6 }}>{fmtDay(dk)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Score du jour */}
+              <div style={{ marginBottom:14, display:"flex", alignItems:"center", justifyContent:"space-between", background:`${C.abysse2}aa`, border:`1px solid ${C.ligne}`, borderRadius:16, padding:"12px 16px" }}>
+                <div>
+                  <div style={{ fontSize:10, color:C.lotus, letterSpacing:1.5, textTransform:"uppercase" }}>Score du jour</div>
+                  <div style={{ fontSize:12, color:C.lilas, fontWeight:300, marginTop:2 }}>
+                    {besoins.filter(b=>getCov(b)==="covered"||!!todayLog[b.id]).length}/{besoins.length} besoins couverts
+                  </div>
+                </div>
+                <div style={{ fontFamily:"'Cormorant Garamond', serif", fontSize:40, fontWeight:500, color: besoins.filter(b=>getCov(b)==="covered"||!!todayLog[b.id]).length/besoins.length>=.7?C.vert:besoins.filter(b=>getCov(b)==="covered"||!!todayLog[b.id]).length/besoins.length>=.4?C.or:C.rouge }}>
+                  {besoins.length>0?Math.round(besoins.filter(b=>getCov(b)==="covered"||!!todayLog[b.id]).length/besoins.length*100):0}%
+                </div>
+              </div>
+
+              {/* Checklist du jour */}
+              <div style={{ fontSize:11, color:C.lilas, letterSpacing:1.5, textTransform:"uppercase", marginBottom:8 }}>Checklist — {new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                {besoins.map(b => {
+                  const cov   = getCov(b);
+                  const lnk   = getLinked(b);
+                  const autoOk= cov==="covered";
+                  const manOk = !!todayLog[b.id];
+                  const ok    = autoOk||manOk;
+                  const activeP = lnk.filter(p=>p.routines?.matin||p.routines?.soir);
+                  return (
+                    <div key={b.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 14px", borderRadius:16, background:ok?`${C.vert}12`:`${C.abysse2}88`, border:`1px solid ${ok?C.vert:cov==="linked"?C.or:C.ligne}` }}>
+                      <div style={{ fontSize:20, flexShrink:0 }}>{b.emoji}</div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:500, color:ok?C.vert:C.nacre }}>{b.nom}</div>
+                        <div style={{ fontSize:11, color:C.lilas, fontWeight:300 }}>
+                          {autoOk
+                            ? "✓ Rituel · "+activeP.map(p=>p.nom).join(", ")
+                            : lnk.length ? lnk.map(p=>p.nom).join(", ")
+                            : "Aucun produit lié"}
+                        </div>
+                        <div style={{ fontSize:10, color:C.lilas, opacity:.6 }}>🔁 {b.freq}</div>
+                      </div>
+                      <button onClick={()=>!autoOk&&toggleToday(b.id)}
+                        style={{ flexShrink:0, width:30, height:30, borderRadius:"50%", cursor:autoOk?"default":"pointer", border:`1.5px solid ${ok?C.vert:C.ligne}`, background:ok?C.vert:"transparent", color:C.abysse, fontWeight:700, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center", opacity:autoOk?.8:1 }}>
+                        {ok?"✓":""}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ══ NOUVEAU BESOIN ══ */}
+          {screen==="nouveau" && (
+            <div className="panel" style={{ maxWidth:540, margin:"0 auto", padding:"10px 16px" }}>
+              <h2 style={{ fontFamily:"'Cormorant Garamond', serif", fontStyle:"italic", fontSize:26, margin:"6px 0 4px", color:C.nacre }}>Nouveau besoin</h2>
+              <p style={{ fontSize:12, color:C.lilas, fontWeight:300, marginBottom:14 }}>Ajoute un besoin organique personnalisé (ex: Zinc, Peptides, Protection pollution…)</p>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ display:"flex", gap:8 }}>
+                  <input value={newB?.emoji||""} onChange={e=>setNewB({...(newB||{}),emoji:e.target.value})} placeholder="🌸" style={{ ...inp, width:54, textAlign:"center", fontSize:22 }} maxLength={2} />
+                  <input value={newB?.nom||""} onChange={e=>setNewB({...(newB||{}),nom:e.target.value})} placeholder="Nom (ex: Zinc, Peptides, Fermeté...)" style={{ ...inp, flex:1 }} />
+                </div>
+                <textarea value={newB?.detail||""} onChange={e=>setNewB({...(newB||{}),detail:e.target.value})} placeholder="Description du bénéfice pour ta peau / tes cheveux..." style={{ ...inp, resize:"vertical", minHeight:60 }} />
+                <div style={{ display:"flex", gap:8 }}>
+                  <select value={newB?.cat||"peau"} onChange={e=>setNewB({...(newB||{}),cat:e.target.value})} style={{ ...inp, flex:1 }}>
+                    {["peau","cheveux","corps","santé"].map(c => <option key={c} value={c} style={{background:C.abysse2}}>{CAT_EMOJI[c]} {c}</option>)}
+                  </select>
+                  <select value={newB?.priorite||"recommande"} onChange={e=>setNewB({...(newB||{}),priorite:e.target.value})} style={{ ...inp, flex:1 }}>
+                    {Object.entries(PRIO).map(([k,v]) => <option key={k} value={k} style={{background:C.abysse2}}>{v.label}</option>)}
+                  </select>
+                </div>
+                <select value={newB?.freq||"quotidien"} onChange={e=>setNewB({...(newB||{}),freq:e.target.value})} style={inp}>
+                  {FREQS.map(f => <option key={f} value={f} style={{background:C.abysse2}}>{f}</option>)}
+                </select>
+                <div>
+                  <input value={newB?.keywords||""} onChange={e=>setNewB({...(newB||{}),keywords:e.target.value})} placeholder="Mots-clés pour auto-détecter tes produits (séparés par des virgules)" style={inp} />
+                  <div style={{ fontSize:10, color:C.lilas, marginTop:4, opacity:.7 }}>Ex: spf, solaire, uv, fluide → auto-détecte tes produits SPF</div>
+                </div>
+                <textarea value={newB?.note||""} onChange={e=>setNewB({...(newB||{}),note:e.target.value})} placeholder="Note personnelle (ex: Indice UV > 3 → SPF50+, à éviter avec le rétinol...)" style={{ ...inp, resize:"vertical", minHeight:50 }} />
+                <button onClick={addBesoin} style={{ padding:14, background:C.lotus, color:"#1a0b2e", border:"none", borderRadius:14, cursor:"pointer", fontSize:14, fontWeight:700, letterSpacing:.5 }}>
+                  🌸 Créer ce besoin
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Barre fixe bas ── */}
+          <div style={{ position:"fixed", bottom:0, left:0, right:0, background:`linear-gradient(${C.abysse2}ee, ${C.abysse}fa)`, backdropFilter:"blur(14px)", borderTop:`1px solid ${C.ligne}`, padding:"14px 20px calc(14px + env(safe-area-inset-bottom))" }}>
+            <div style={{ maxWidth:520, margin:"0 auto", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:10, letterSpacing:2, textTransform:"uppercase", color:C.lotus }}>Couverture du rituel</div>
+                <div style={{ fontSize:12, color:C.lilas, fontWeight:300 }}>
+                  {totalCovered} actif{totalCovered>1?"s":""} couvert{totalCovered>1?"s":""} · {besoins.filter(b=>getCov(b)==="linked").length} à activer · {besoins.filter(b=>getCov(b)==="missing").length} manquant{besoins.filter(b=>getCov(b)==="missing").length>1?"s":""}
+                </div>
+              </div>
+              <div style={{ fontFamily:"'Cormorant Garamond', serif", fontSize:36, fontWeight:500, color:pctGlobal>=70?C.vert:pctGlobal>=40?C.or:C.rouge }}>{pctGlobal}%</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
