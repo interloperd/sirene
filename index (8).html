@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Sirène" />
+  <title>Sirène — Rituel Beauté</title>
+  <link rel="manifest" href="manifest.json" />
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>* { box-sizing: border-box; margin: 0; padding: 0; } body { background: #1a0b2e; }</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+    const C = {
+      abysse: "#1a0b2e", abysse2: "#2d1245", violet: "#6b2d9c",
+      orchidee: "#a855c4", lilas: "#c89bdb", nacre: "#f3e9f7",
+      ecaille: "#7ce0c9", or: "#e8c87a", lotus: "#f0a0c0",
+      ligne: "rgba(200,155,219,0.22)",
+    };
+
+    const fmt = (n) => n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const STORAGE_KEY = "rituel_data_v5";
+    const SHOP_KEY    = "rituel_shop_v1";
+    const SYNC_KEY    = "sirene_sync_v1";
+    const mk = (id, nom, ref, prix, o) => ({ id, nom, ref, prix, wish: false, fini: false, photo: null, routines: { matin: false, soir: false }, ...o });
+
+    const SEED = {
+      cheveux: { label: "Cheveux", items: [
+        mk("c1","Shampooing","Olaplex No.4",28.0,{routines:{matin:true,soir:false}}),
+        mk("c2","Masque réparateur","Kérastase Résistance",34.0,{wish:true}),
+        mk("c3","Huile capillaire","Moroccanoil",33.0,{routines:{matin:true,soir:true}}),
+        mk("c4","Crème boucles","Cantu Curl Cream",11.0,{routines:{matin:true,soir:false}}),
+      ]},
+      yeux: { label: "Yeux", items: [
+        mk("y1","Contour des yeux","Caudalie Resvératrol",39.0,{routines:{matin:true,soir:true}}),
+        mk("y2","Mascara","Lancôme Hypnôse",30.5,{routines:{matin:true,soir:false}}),
+        mk("y3","Palette fards","Charlotte Tilbury",56.0,{wish:true}),
+      ]},
+      levres: { label: "Lèvres", items: [
+        mk("l1","Baume à lèvres","Dior Lip Glow 001",38.0,{routines:{matin:true,soir:true}}),
+        mk("l2","Crayon à lèvres","MAC Whirl",22.0,{routines:{matin:true,soir:false}}),
+        mk("l3","Gloss","Fenty Gloss Bomb",21.0,{routines:{matin:true,soir:false}}),
+      ]},
+      peau: { label: "Peau du visage", items: [
+        mk("v1","Crème hydratante","La Roche-Posay Toleriane",18.9,{routines:{matin:true,soir:true}}),
+        mk("v2","Sérum vitamine C","The Ordinary 23%",11.5,{routines:{matin:true,soir:false},fini:true}),
+        mk("v3","Crème solaire SPF50","Avène Fluide",16.0,{routines:{matin:true,soir:false}}),
+        mk("v4","Eau micellaire","Bioderma Sensibio",9.9,{routines:{matin:false,soir:true}}),
+      ]},
+      buste: { label: "Buste & corps", items: [
+        mk("b1","Lait hydratant","Nuxe Rêve de Miel",19.9,{routines:{matin:false,soir:true}}),
+        mk("b2","Gommage","Sol de Janeiro Bum Bum",24.0,{wish:true}),
+        mk("b3","Brume parfumée","Sol de Janeiro 62",28.0,{routines:{matin:true,soir:false}}),
+      ]},
+      mains: { label: "Mains", items: [
+        mk("m1","Crème mains","L'Occitane Karité",12.0,{routines:{matin:true,soir:true}}),
+        mk("m2","Huile cuticules","Mavala",9.5,{}),
+      ]},
+      jambes: { label: "Jambes & pieds", items: [
+        mk("j1","Crème jambes","Weleda Bouleau",17.0,{routines:{matin:false,soir:true}}),
+        mk("j2","Baume pieds","Neutrogena Pieds Secs",8.5,{}),
+        mk("j3","Huile sèche","Nuxe Huile Prodigieuse",26.0,{routines:{matin:true,soir:false},wish:true}),
+      ]},
+    };
+
+    const VIEW = {
+      corps:  { box: "0 0 300 700", label: "Corps entier" },
+      haut:   { box: "55 5 190 300", label: "Haut du corps", parent: "corps" },
+      visage: { box: "104 48 92 100", label: "Visage", parent: "haut" },
+    };
+    const ZONE_ORDER = ["cheveux","yeux","levres","peau","buste","mains","jambes"];
+    const CAT_LABEL  = { cheveux:"Cheveux", yeux:"Yeux", levres:"Lèvres", peau:"Visage", buste:"Corps", mains:"Mains", jambes:"Jambes" };
+
+    const SHOP_SEED = [
+      {id:"s1",marque:"Dior",cat:"levres",nom:"Baume teinté",ref:"Lip Glow 004",prix:38},
+      {id:"s2",marque:"Dior",cat:"peau",nom:"Sérum éclat",ref:"Capture Totale",prix:110},
+      {id:"s3",marque:"Fenty Beauty",cat:"levres",nom:"Gloss",ref:"Gloss Bomb Universal",prix:21},
+      {id:"s4",marque:"Fenty Beauty",cat:"peau",nom:"Fond de teint",ref:"Pro Filt'r",prix:36},
+      {id:"s5",marque:"The Ordinary",cat:"peau",nom:"Sérum niacinamide",ref:"Niacinamide 10%",prix:6},
+      {id:"s6",marque:"The Ordinary",cat:"peau",nom:"Acide hyaluronique",ref:"HA 2% + B5",prix:8},
+      {id:"s7",marque:"Olaplex",cat:"cheveux",nom:"Soin réparateur",ref:"No.3 Hair Perfector",prix:30},
+      {id:"s8",marque:"Olaplex",cat:"cheveux",nom:"Shampooing",ref:"No.4 Bond",prix:28},
+      {id:"s9",marque:"Sol de Janeiro",cat:"buste",nom:"Brume parfumée",ref:"Cheirosa 62",prix:28},
+      {id:"s10",marque:"Sol de Janeiro",cat:"buste",nom:"Crème corps",ref:"Bum Bum Cream",prix:48},
+      {id:"s11",marque:"Charlotte Tilbury",cat:"yeux",nom:"Palette fards",ref:"Pillow Talk",prix:56},
+      {id:"s12",marque:"Charlotte Tilbury",cat:"peau",nom:"Crème jour",ref:"Magic Cream",prix:75},
+      {id:"s13",marque:"L'Occitane",cat:"mains",nom:"Crème mains",ref:"Karité 150ml",prix:24},
+      {id:"s14",marque:"Nuxe",cat:"jambes",nom:"Huile sèche",ref:"Huile Prodigieuse",prix:26},
+      {id:"s15",marque:"Lancôme",cat:"yeux",nom:"Mascara",ref:"Hypnôse",prix:30.5},
+    ];
+
+    // ── GitHub helpers ─────────────────────────────────────────────────────
+    const b64enc = (str) => { let b=""; const bytes=new TextEncoder().encode(str); bytes.forEach(b2=>b+=String.fromCharCode(b2)); return btoa(b); };
+    const b64dec = (str) => new TextDecoder().decode(Uint8Array.from(atob(str.replace(/\n/g,"")), c=>c.charCodeAt(0)));
+
+    async function ghGet(cfg) {
+      const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/sirene-backup.json`,
+        { headers: { Authorization:`token ${cfg.token}`, Accept:"application/vnd.github+json" } });
+      if (!r.ok) return null;
+      return r.json();
+    }
+    async function ghPut(cfg, content, sha) {
+      const body = { message:`Sirène backup — ${new Date().toLocaleDateString("fr-FR")}`, content: b64enc(content) };
+      if (sha) body.sha = sha;
+      const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/sirene-backup.json`,
+        { method:"PUT", headers:{ Authorization:`token ${cfg.token}`, "Content-Type":"application/json", Accept:"application/vnd.github+json" }, body: JSON.stringify(body) });
+      return r.ok;
+    }
+
+    function App() {
+      const [data, setData]         = useState(SEED);
+      const [shop, setShop]         = useState(SHOP_SEED);
+      const [mode, setMode]         = useState("matin");
+      const [screen, setScreen]     = useState("corps");
+      const [level, setLevel]       = useState("corps");
+      const [zone, setZone]         = useState(null);
+      const [loaded, setLoaded]     = useState(false);
+      const [editing, setEditing]   = useState(null);
+      const [draft, setDraft]       = useState({ nom:"", ref:"", prix:"" });
+      const [query, setQuery]       = useState("");
+      const fileRef                 = useRef(null);
+      const [photoTarget, setPhotoTarget] = useState(null);
+      const [shopBrand, setShopBrand]     = useState(null);
+      const [shopCat, setShopCat]         = useState("all");
+      const [justAdded, setJustAdded]     = useState(null);
+      const [newShop, setNewShop]         = useState(null);
+      const [confirmDelete, setConfirmDelete] = useState(false);
+      // Sync
+      const [showSync, setShowSync]   = useState(false);
+      const [syncCfg, setSyncCfg]     = useState(null);
+      const [syncStatus, setSyncStatus] = useState(null); // null|"saving"|"saved"|"loading"|"error"
+      const [syncDraft, setSyncDraft] = useState({ token:"", owner:"", repo:"" });
+
+      useEffect(() => {
+        try { const r = localStorage.getItem(STORAGE_KEY); if (r) setData(JSON.parse(r)); } catch {}
+        try { const s = localStorage.getItem(SHOP_KEY); if (s) setShop(JSON.parse(s)); } catch {}
+        try { const c = localStorage.getItem(SYNC_KEY); if (c) setSyncCfg(JSON.parse(c)); } catch {}
+        setLoaded(true);
+      }, []);
+
+      const persist     = useCallback((next) => { setData(next); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {} }, []);
+      const persistShop = useCallback((next) => { setShop(next); try { localStorage.setItem(SHOP_KEY, JSON.stringify(next)); } catch {} }, []);
+      const saveCfg     = (cfg) => { setSyncCfg(cfg); try { localStorage.setItem(SYNC_KEY, JSON.stringify(cfg)); } catch {} };
+
+      const doSave = async () => {
+        if (!syncCfg || !navigator.onLine) { setSyncStatus("error"); return; }
+        setSyncStatus("saving");
+        try {
+          const existing = await ghGet(syncCfg);
+          const sha = existing?.sha || null;
+          const content = JSON.stringify({ rituel: data, shop, savedAt: new Date().toISOString() });
+          const ok = await ghPut(syncCfg, content, sha);
+          if (ok) { setSyncStatus("saved"); saveCfg({ ...syncCfg, lastSave: new Date().toISOString() }); }
+          else setSyncStatus("error");
+        } catch { setSyncStatus("error"); }
+      };
+
+      const doLoad = async () => {
+        if (!syncCfg || !navigator.onLine) { setSyncStatus("error"); return; }
+        setSyncStatus("loading");
+        try {
+          const file = await ghGet(syncCfg);
+          if (!file) { setSyncStatus("error"); return; }
+          const backup = JSON.parse(b64dec(file.content));
+          if (backup.rituel) persist(backup.rituel);
+          if (backup.shop) persistShop(backup.shop);
+          setSyncStatus("saved");
+        } catch { setSyncStatus("error"); }
+      };
+
+      const isWish = mode === "wishlist";
+      const selOf  = (it) => isWish ? it.wish : it.routines?.[mode];
+
+      const toggleSel  = (zk, id) => persist({ ...data, [zk]: { ...data[zk], items: data[zk].items.map(it => { if (it.id!==id) return it; if (isWish) return {...it,wish:!it.wish}; return {...it,routines:{...it.routines,[mode]:!it.routines?.[mode]}}; }) }});
+      const toggleFini = (zk, id) => persist({ ...data, [zk]: { ...data[zk], items: data[zk].items.map(it => it.id===id ? {...it,fini:!it.fini} : it) } });
+      const updateItem = (zk, id, patch) => persist({ ...data, [zk]: { ...data[zk], items: data[zk].items.map(it => it.id===id ? {...it,...patch} : it) } });
+      const removeItem = (zk, id) => persist({ ...data, [zk]: { ...data[zk], items: data[zk].items.filter(it => it.id!==id) } });
+      const addItem    = (zk) => { const id=zk[0]+Date.now(); const base=mk(id,"Nouveau produit","Référence",0,isWish?{wish:true}:{routines:{[mode]:true,[mode==="matin"?"soir":"matin"]:false}}); persist({...data,[zk]:{...data[zk],items:[...data[zk].items,base]}}); setEditing(id); setDraft({nom:"Nouveau produit",ref:"Référence",prix:"0"}); };
+
+      const onPickPhoto = (zk, id) => { setPhotoTarget({zk,id}); fileRef.current?.click(); };
+      const onFile = (e) => {
+        const file = e.target.files?.[0]; if (!file||!photoTarget) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => { const img=new Image(); img.onload=()=>{ const max=320,scale=Math.min(1,max/Math.max(img.width,img.height)); const cv=document.createElement("canvas"); cv.width=img.width*scale; cv.height=img.height*scale; cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height); updateItem(photoTarget.zk,photoTarget.id,{photo:cv.toDataURL("image/jpeg",0.7)}); setPhotoTarget(null); }; img.src=ev.target.result; };
+        reader.readAsDataURL(file); e.target.value="";
+      };
+
+      const {total,count} = useMemo(() => { let t=0,c=0; Object.values(data).forEach(z=>z.items.forEach(it=>{if(selOf(it)){t+= +it.prix||0;c++;}})); return {total:t,count:c}; }, [data,mode]);
+      const zoneCount = (zk) => data[zk].items.filter(selOf).length;
+      const aRacheter = useMemo(() => { const out=[]; ZONE_ORDER.forEach(zk=>data[zk].items.forEach(it=>{if(it.fini)out.push({...it,zk,zlabel:data[zk].label});})); return out; }, [data]);
+      const totalRachat = aRacheter.reduce((s,it)=>s+(+it.prix||0),0);
+      const recap = useMemo(() => ZONE_ORDER.map(zk=>({zk,label:data[zk].label,items:data[zk].items.filter(selOf)})).filter(g=>g.items.length), [data,mode]);
+      const results = useMemo(() => { const q=query.trim().toLowerCase(); if(!q) return []; const out=[]; ZONE_ORDER.forEach(zk=>data[zk].items.forEach(it=>{if(it.nom.toLowerCase().includes(q)||it.ref.toLowerCase().includes(q))out.push({...it,zk,zlabel:data[zk].label});})); return out; }, [data,query]);
+
+      const startEdit = (it) => { setEditing(it.id); setDraft({nom:it.nom,ref:it.ref,prix:String(it.prix)}); };
+      const saveEdit  = (zk, id) => { updateItem(zk,id,{nom:draft.nom.trim()||"Sans nom",ref:draft.ref.trim(),prix:parseFloat(draft.prix.replace(",","."))||0}); setEditing(null); };
+      const goUp = () => { setZone(null); setLevel(VIEW[level].parent||"corps"); };
+
+      const brands   = useMemo(() => { const m={}; shop.forEach(a=>{(m[a.marque]=m[a.marque]||[]).push(a);}); return Object.keys(m).sort().map(marque=>({marque,articles:m[marque]})); }, [shop]);
+      const shopView = useMemo(() => { let list=shopBrand?shop.filter(a=>a.marque===shopBrand):shop; if(shopCat!=="all")list=list.filter(a=>a.cat===shopCat); return list; }, [shop,shopBrand,shopCat]);
+
+      const buyToWishlist  = (art) => { const zk=art.cat,id="w"+Date.now(); persist({...data,[zk]:{...data[zk],items:[...data[zk].items,mk(id,art.nom,`${art.marque} · ${art.ref}`,art.prix,{wish:true})]}}); setJustAdded(art.id); setTimeout(()=>setJustAdded(p=>(p===art.id?null:p)),1400); };
+      const addShopArticle = () => { if(!newShop)return; const a={id:"s"+Date.now(),perso:true,marque:newShop.marque.trim()||"Ma marque",cat:newShop.cat||"peau",nom:newShop.nom.trim()||"Produit",ref:newShop.ref.trim(),prix:parseFloat(String(newShop.prix).replace(",","."))||0}; persistShop([...shop,a]); setNewShop(null); setShopBrand(a.marque); };
+      const removeShopArticle = (id) => persistShop(shop.filter(a=>a.id!==id));
+      const removeBrand   = (marque) => { persistShop(shop.filter(a=>a.marque!==marque)); setShopBrand(null); setConfirmDelete(false); };
+      const backToGallery = () => { setShopBrand(null); setShopCat("all"); setConfirmDelete(false); setNewShop(null); };
+
+      if (!loaded) return null;
+
+      const hotspots = {
+        corps: [
+          {kind:"zoom",to:"haut",  label:"Haut du corps",path:"M124 150 Q150 142 176 150 Q196 168 192 200 Q188 230 178 252 L122 252 Q112 230 108 200 Q104 168 124 150Z",cx:150,cy:200,bx:150,by:198},
+          {kind:"zone",zk:"buste", label:"Buste & corps", path:"M124 254 Q150 248 176 254 Q188 240 192 215 Q190 240 168 270 Q200 300 206 360 Q210 410 196 432 L104 432 Q90 410 94 360 Q100 300 132 270 Q110 240 108 215 Q112 240 124 254Z",cx:150,cy:350,bx:150,by:350},
+          {kind:"zone",zk:"jambes",label:"Jambes & pieds",path:"M104 432 L196 432 Q200 510 182 590 Q174 645 168 670 L152 672 L150 434 L148 672 L132 670 Q126 645 118 590 Q100 510 104 432Z",cx:150,cy:540,bx:150,by:540},
+          {kind:"zone",zk:"mains", label:"Mains",          path:"M66 300 Q60 340 74 372 L90 366 Q80 336 84 302Z",cx:76,cy:340,bx:76,by:338},
+        ],
+        haut: [
+          {kind:"zoom",to:"visage",label:"Visage",  path:"M118 90 a32 40 0 1 0 64 0 a32 40 0 1 0 -64 0Z",cx:150,cy:90,bx:150,by:90},
+          {kind:"zone",zk:"cheveux",label:"Cheveux",path:"M104 120 Q90 80 104 56 Q120 16 150 14 Q180 16 196 56 Q210 80 196 120 Q200 90 184 70 Q170 52 150 50 Q130 52 116 70 Q100 90 104 120Z",cx:150,cy:50,bx:150,by:60},
+          {kind:"zone",zk:"buste",  label:"Buste",  path:"M124 150 Q150 142 176 150 Q196 168 192 200 Q190 230 180 260 L120 260 Q110 230 108 200 Q104 168 124 150Z",cx:150,cy:210,bx:150,by:210},
+        ],
+        visage: [
+          {kind:"zone",zk:"yeux",  label:"Yeux",  path:"M118 86 Q134 78 148 86 Q134 96 118 86Z M152 86 Q166 78 182 86 Q166 96 152 86Z",cx:150,cy:84,bx:133,by:87},
+          {kind:"zone",zk:"levres",label:"Lèvres",path:"M134 120 Q150 112 166 120 Q150 132 134 120Z",cx:150,cy:122,bx:150,by:122},
+          {kind:"zone",zk:"peau",  label:"Peau",  path:"M118 92 Q120 70 150 68 L150 110 Q132 112 124 104Z M150 68 Q180 70 182 92 Q180 104 168 110 L150 110Z",cx:124,cy:100,bx:170,by:87},
+        ],
+      };
+
+      const crumbs=[]; let cur=level; while(cur){crumbs.unshift(cur);cur=VIEW[cur].parent;}
+      const showFaceDetails = level==="visage";
+      const accent  = isWish ? C.ecaille : C.or;
+      const selVerb = isWish ? "souhaité" : "utilisé";
+
+      const inp    = { background:"rgba(255,255,255,0.06)", border:`1px solid ${C.ligne}`, color:C.nacre, borderRadius:10, padding:"8px 10px", fontSize:13, fontFamily:"inherit", outline:"none" };
+      const btnGo  = { background:C.ecaille, color:C.abysse, border:"none", borderRadius:10, padding:"0 16px", fontWeight:600, cursor:"pointer", fontSize:13 };
+      const btnDel = { background:"transparent", color:"#e88", border:"1px solid rgba(255,150,150,0.4)", borderRadius:10, padding:"0 12px", cursor:"pointer", fontSize:13 };
+
+      // ── ProductRow ── autoComplete="off" + stopPropagation corrigés
+      const ProductRow = ({ it, zk, showSelect=true, showZone=false, zlabel }) => {
+        const sel = selOf(it);
+        return (
+          <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${C.ligne}`}}>
+            {showSelect && (
+              <button onClick={()=>toggleSel(zk,it.id)} aria-pressed={sel}
+                style={{flexShrink:0,width:26,height:26,borderRadius:"50%",cursor:"pointer",border:`1.5px solid ${sel?accent:C.lilas}`,background:sel?accent:"transparent",color:C.abysse,fontWeight:700,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {sel?(isWish?"♡":"✓"):""}
+              </button>
+            )}
+            <button onClick={()=>onPickPhoto(zk,it.id)}
+              style={{flexShrink:0,width:42,height:42,borderRadius:10,cursor:"pointer",overflow:"hidden",border:`1px solid ${C.ligne}`,background:it.photo?"transparent":"rgba(255,255,255,0.05)",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {it.photo?<img src={it.photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:16,color:C.lilas,opacity:0.6}}>+</span>}
+            </button>
+            {editing===it.id ? (
+              <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}} onClick={e=>e.stopPropagation()}>
+                <input value={draft.nom} onChange={e=>setDraft({...draft,nom:e.target.value})} placeholder="Nom du produit"
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" style={inp} />
+                <input value={draft.ref} onChange={e=>setDraft({...draft,ref:e.target.value})} placeholder="Marque / référence"
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false" style={inp} />
+                <div style={{display:"flex",gap:8}}>
+                  <input value={draft.prix} onChange={e=>setDraft({...draft,prix:e.target.value})} placeholder="Prix"
+                    inputMode="decimal" autoComplete="off" style={{...inp,width:90}} />
+                  <button onClick={()=>saveEdit(zk,it.id)} style={btnGo}>OK</button>
+                  <button onClick={()=>removeItem(zk,it.id)} style={btnDel}>Suppr.</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{flex:1,cursor:"pointer",minWidth:0}} onClick={()=>startEdit(it)}>
+                <div style={{fontSize:14,fontWeight:500,color:it.fini?C.lilas:C.nacre,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <span style={{textDecoration:it.fini?"line-through":"none"}}>{it.nom}</span>
+                  {showZone&&<span style={{fontSize:10,color:C.lilas,border:`1px solid ${C.ligne}`,borderRadius:6,padding:"1px 6px"}}>{zlabel}</span>}
+                  {it.wish&&!isWish&&<span style={{fontSize:11,color:C.ecaille}}>♡</span>}
+                </div>
+                <div style={{fontSize:12,color:C.lilas,fontWeight:300}}>{it.ref}</div>
+              </div>
+            )}
+            {editing!==it.id&&(
+              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                <button onClick={()=>toggleFini(zk,it.id)} aria-pressed={it.fini}
+                  style={{width:28,height:28,borderRadius:8,cursor:"pointer",fontSize:13,border:`1px solid ${it.fini?C.or:C.ligne}`,background:it.fini?`${C.or}22`:"transparent",color:it.fini?C.or:C.lilas}}>⟳</button>
+                <div style={{fontFamily:"'Cormorant Garamond', serif",fontSize:19,color:C.or,fontWeight:500}}>{fmt(it.prix)} €</div>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      const syncBtnLabel = syncStatus==="saving"?"⏳ Sauvegarde...":syncStatus==="loading"?"⏳ Restauration...":syncStatus==="saved"?"✓ Synchronisé":syncStatus==="error"?"✗ Erreur — vérif token":"☁ Sauvegarder";
+      const syncBtnColor = syncStatus==="saved"?C.ecaille:syncStatus==="error"?"#e88":C.lilas;
+
+      return (
+        <div style={{minHeight:"100vh",background:`radial-gradient(120% 80% at 50% -10%, ${C.violet}22, transparent), linear-gradient(${C.abysse}, ${C.abysse2})`,fontFamily:"'Montserrat', system-ui, sans-serif",color:C.nacre,paddingBottom:130}}>
+          <style>{`
+            @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,400&family=Montserrat:wght@300;400;500;600&display=swap');
+            * { box-sizing:border-box; }
+            .hs{cursor:pointer;} .hs:hover .hs-fill{opacity:.4!important;}
+            .stage svg{transition:all .55s cubic-bezier(.6,0,.2,1);}
+            @keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+            @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+            .panel{animation:slideUp .3s ease;} .face-detail{animation:fadeIn .5s ease;}
+            input::placeholder{color:${C.lilas};opacity:.5;}
+          `}</style>
+
+          <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{display:"none"}} />
+
+          {/* ── LOGO LVMH ── */}
+          <header style={{textAlign:"center",padding:"32px 20px 6px",position:"relative"}}>
+            <a href="lotus.html" style={{position:"absolute",right:18,top:34,fontSize:9,letterSpacing:3,color:C.lotus,textDecoration:"none",fontWeight:500,textTransform:"uppercase",opacity:.9}}>🌸 Lotus</a>
+            <button onClick={()=>{setShowSync(true);setSyncStatus(null);}} style={{position:"absolute",left:18,top:32,fontSize:11,letterSpacing:1,color:syncCfg?C.ecaille:C.lilas,background:"transparent",border:`1px solid ${syncCfg?C.ecaille:C.ligne}`,borderRadius:12,padding:"4px 10px",cursor:"pointer",opacity:.85}}>
+              {syncCfg ? (navigator.onLine ? "☁" : "☁ offline") : "☁"}
+            </button>
+            <div style={{width:100,height:"0.5px",background:`linear-gradient(90deg,transparent,${C.nacre}60,transparent)`,margin:"0 auto 16px"}}/>
+            <h1 style={{fontFamily:"'Cormorant Garamond', serif",fontWeight:300,fontStyle:"normal",fontSize:27,margin:0,lineHeight:1,letterSpacing:12,textTransform:"uppercase",color:C.nacre}}>Sirène</h1>
+            <div style={{fontSize:7.5,letterSpacing:5.5,color:C.lilas,textTransform:"uppercase",marginTop:9,fontWeight:400,opacity:.65}}>Maison de Beauté</div>
+            <div style={{width:100,height:"0.5px",background:`linear-gradient(90deg,transparent,${C.nacre}60,transparent)`,margin:"14px auto 0"}}/>
+          </header>
+
+          {/* ── MODAL SYNC ── */}
+          {showSync && (
+            <div onClick={()=>setShowSync(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:100,display:"flex",alignItems:"flex-end"}}>
+              <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,margin:"0 auto",background:C.abysse2,border:`1px solid ${C.ligne}`,borderRadius:"24px 24px 0 0",padding:24,paddingBottom:"calc(24px + env(safe-area-inset-bottom))"}}>
+                <div style={{width:40,height:4,background:C.ligne,borderRadius:2,margin:"0 auto 18px"}}/>
+                <h2 style={{fontFamily:"'Cormorant Garamond', serif",fontStyle:"italic",fontSize:22,color:C.nacre,marginBottom:4}}>☁ Synchronisation GitHub</h2>
+
+                {!syncCfg ? (
+                  // ── Setup ──
+                  <div>
+                    <p style={{fontSize:12,color:C.lilas,marginBottom:14,lineHeight:1.5}}>Configure une fois, puis sauvegarde en un tap. Crée un token sur <span style={{color:C.ecaille}}>github.com → Settings → Developer settings → Personal access tokens → Fine-grained</span> avec scope <b>Contents: Write</b>.</p>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      <input value={syncDraft.token} onChange={e=>setSyncDraft({...syncDraft,token:e.target.value})} placeholder="ghp_... (token GitHub)" autoComplete="off" style={{...inp,fontFamily:"monospace",fontSize:11}}/>
+                      <input value={syncDraft.owner} onChange={e=>setSyncDraft({...syncDraft,owner:e.target.value})} placeholder="Ton pseudo GitHub" autoComplete="off" autoCapitalize="off" style={inp}/>
+                      <input value={syncDraft.repo}  onChange={e=>setSyncDraft({...syncDraft,repo:e.target.value})}  placeholder="Nom du repo (ex: sirene)" autoComplete="off" autoCapitalize="off" style={inp}/>
+                      <button onClick={()=>{ if(!syncDraft.token||!syncDraft.owner||!syncDraft.repo)return; saveCfg({token:syncDraft.token.trim(),owner:syncDraft.owner.trim(),repo:syncDraft.repo.trim()}); setSyncDraft({token:"",owner:"",repo:""}); }} style={{...btnGo,padding:"12px 0",width:"100%",borderRadius:12}}>Configurer</button>
+                    </div>
+                  </div>
+                ) : (
+                  // ── Actions ──
+                  <div>
+                    <div style={{background:`${C.ecaille}15`,border:`1px solid ${C.ecaille}44`,borderRadius:12,padding:"8px 14px",marginBottom:14}}>
+                      <div style={{fontSize:11,color:C.ecaille}}>Repo configuré</div>
+                      <div style={{fontSize:13,color:C.nacre,fontWeight:500}}>{syncCfg.owner}/{syncCfg.repo}</div>
+                      {syncCfg.lastSave && <div style={{fontSize:10,color:C.lilas,marginTop:2}}>Dernier backup : {new Date(syncCfg.lastSave).toLocaleString("fr-FR")}</div>}
+                      {!navigator.onLine && <div style={{fontSize:10,color:"#e88",marginTop:2}}>⚠ Hors connexion</div>}
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      <button onClick={doSave} disabled={syncStatus==="saving"||!navigator.onLine}
+                        style={{...btnGo,padding:"13px 0",width:"100%",borderRadius:12,background:navigator.onLine?C.ecaille:`${C.ecaille}55`,color:C.abysse,fontSize:14}}>
+                        {syncStatus==="saving"?"⏳ Sauvegarde en cours...":"☁ Sauvegarder maintenant"}
+                      </button>
+                      <button onClick={doLoad} disabled={syncStatus==="loading"||!navigator.onLine}
+                        style={{padding:"12px 0",width:"100%",borderRadius:12,border:`1px solid ${C.ligne}`,background:"transparent",color:C.lilas,cursor:"pointer",fontSize:13}}>
+                        {syncStatus==="loading"?"⏳ Restauration...":"📥 Restaurer depuis GitHub"}
+                      </button>
+                      {syncStatus==="saved"&&<div style={{textAlign:"center",fontSize:12,color:C.ecaille}}>✓ Opération réussie !</div>}
+                      {syncStatus==="error"&&<div style={{textAlign:"center",fontSize:12,color:"#e88"}}>✗ Échec — vérifie le token et la connexion</div>}
+                      <button onClick={()=>saveCfg(null)} style={{padding:"8px 0",width:"100%",borderRadius:12,border:"1px solid rgba(255,150,150,0.3)",background:"transparent",color:"#e8888880",cursor:"pointer",fontSize:11,marginTop:4}}>⚙ Réinitialiser la configuration</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div style={{display:"flex",justifyContent:"center",gap:6,padding:"14px 16px 4px",flexWrap:"wrap"}}>
+            {[["matin","☀ Matin"],["soir","☾ Soir"],["wishlist","♡ Wishlist"]].map(([k,lbl])=>{ const on=mode===k,a=k==="wishlist"?C.ecaille:C.or; return <button key={k} onClick={()=>{setMode(k);setZone(null);setScreen("corps");}} style={{padding:"8px 18px",borderRadius:20,cursor:"pointer",fontSize:13,fontWeight:500,border:`1px solid ${on?a:C.ligne}`,background:on?`${a}22`:"transparent",color:on?a:C.lilas}}>{lbl}</button>; })}
+          </div>
+
+          <div style={{display:"flex",justifyContent:"center",gap:6,padding:"6px 16px",flexWrap:"wrap"}}>
+            {[["corps","Corps"],["recap","Récap"],["racheter",`À racheter${aRacheter.length?` (${aRacheter.length})`:""}`],["recherche","Recherche"],["boutique","✦ Boutique"]].map(([k,lbl])=>{ const on=screen===k; return <button key={k} onClick={()=>{setScreen(k);setZone(null);}} style={{padding:"6px 14px",borderRadius:14,cursor:"pointer",fontSize:12,fontWeight:500,border:`1px solid ${on?C.orchidee:C.ligne}`,background:on?`${C.orchidee}33`:"transparent",color:on?C.nacre:C.lilas}}>{lbl}</button>; })}
+          </div>
+
+          {screen==="corps"&&(<>
+            <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8,padding:"8px 16px",flexWrap:"wrap"}}>
+              {level!=="corps"&&<button onClick={goUp} style={{background:"transparent",border:`1px solid ${C.ligne}`,color:C.ecaille,borderRadius:20,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:500}}>← Dézoomer</button>}
+              <div style={{fontSize:12,color:C.lilas,fontWeight:300}}>{crumbs.map((c,i)=><span key={c}><span style={{color:i===crumbs.length-1?C.nacre:C.lilas,fontWeight:i===crumbs.length-1?500:300}}>{VIEW[c].label}</span>{i<crumbs.length-1&&<span style={{opacity:.5}}> › </span>}</span>)}</div>
+            </div>
+            <p style={{textAlign:"center",color:C.lilas,fontSize:12,fontWeight:300,margin:"2px 0 0",opacity:.7}}>{level==="visage"?"Touche les yeux, lèvres ou peau":"Pointillés = zoomer · trait plein = produits"}</p>
+
+            <div className="stage" style={{display:"flex",justifyContent:"center",padding:"10px 16px 24px"}}>
+              <svg viewBox={VIEW[level].box} width="100%" overflow="visible" style={{maxWidth:300,height:420}}>
+                <defs>
+                  <linearGradient id="skin" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.orchidee} stopOpacity=".85"/><stop offset="100%" stopColor={C.violet} stopOpacity=".5"/></linearGradient>
+                  <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.violet}/><stop offset="100%" stopColor={C.orchidee} stopOpacity=".6"/></linearGradient>
+                  <radialGradient id="glow" cx="50%" cy="20%" r="70%"><stop offset="0%" stopColor={C.ecaille} stopOpacity=".16"/><stop offset="100%" stopColor={C.ecaille} stopOpacity="0"/></radialGradient>
+                </defs>
+                <ellipse cx="150" cy="320" rx="180" ry="360" fill="url(#glow)"/>
+                <path d="M118 56 Q150 14 182 56 Q200 80 196 120 Q210 160 206 220 Q204 270 196 320 Q190 360 178 392 Q186 360 184 320 Q186 270 180 220 Q176 170 168 130 Q160 100 150 96 Q140 100 132 130 Q124 170 120 220 Q114 270 116 320 Q114 360 122 392 Q110 360 104 320 Q96 270 94 220 Q90 160 104 120 Q100 80 118 56Z" fill="url(#hair)"/>
+                <g fill="url(#hair)"><path d="M104 150 q-12 6 -4 18 q-12 4 -3 16 q-12 8 0 16 q-11 10 2 16 q-10 12 4 15 q-9 14 6 14 l8 -6 q-12 -10 -8 -24 q-12 -12 -4 -26 q-11 -14 -1 -28 q-10 -14 2 -27Z"/><path d="M196 150 q12 6 4 18 q12 4 3 16 q12 8 0 16 q11 10 -2 16 q10 12 -4 15 q9 14 -6 14 l-8 -6 q12 -10 8 -24 q12 -12 4 -26 q11 -14 1 -28 q10 -14 -2 -27Z"/></g>
+                <ellipse cx="150" cy="90" rx="32" ry="40" fill="url(#skin)"/>
+                {showFaceDetails&&(<g className="face-detail"><g stroke={C.nacre} strokeOpacity=".55" strokeWidth="1.6" fill="none" strokeLinecap="round"><path d="M126 86 Q134 80 144 86"/><path d="M156 86 Q166 80 174 86"/></g><path d="M149 94 Q150 102 154 104" stroke={C.nacre} strokeOpacity=".32" strokeWidth="1.2" fill="none"/><path d="M138 120 Q150 126 162 120" stroke={C.or} strokeOpacity=".8" strokeWidth="2.4" fill="none" strokeLinecap="round"/></g>)}
+                <path d="M141 126 L141 144 Q150 150 159 144 L159 126Z" fill="url(#skin)"/>
+                <path d="M124 150 Q150 142 176 150 Q196 168 192 200 Q188 240 168 270 Q200 300 206 360 Q210 410 196 432 Q200 510 182 590 Q174 645 168 670 L152 672 L150 432 L148 672 L132 670 Q126 645 118 590 Q100 510 104 432 Q90 410 94 360 Q100 300 132 270 Q112 240 108 200 Q104 168 124 150Z" fill="url(#skin)"/>
+                <path d="M132 192 Q140 206 150 200 Q160 206 168 192" stroke={C.violet} strokeOpacity=".3" strokeWidth="1.5" fill="none"/><circle cx="150" cy="300" r="1.6" fill={C.violet} opacity=".35"/>
+                <path d="M150 432 L150 672" stroke={C.abysse} strokeOpacity=".32" strokeWidth="2"/>
+                <path d="M132 670 Q126 682 138 684 L152 682 L152 670Z" fill="url(#skin)"/><path d="M168 670 Q174 682 162 684 L148 682 L148 670Z" fill="url(#skin)"/>
+                <path d="M120 162 Q92 200 80 290 Q74 330 86 372 L98 366 Q88 330 92 294 Q104 210 128 178Z" fill="url(#skin)"/>
+                <path d="M180 162 Q208 200 220 290 Q226 330 214 372 L202 366 Q212 330 208 294 Q196 210 172 178Z" fill="url(#skin)"/>
+                {hotspots[level].map((h,i)=>{ const n=h.zk?zoneCount(h.zk):null,active=h.zk&&zone===h.zk; return (
+                  <g key={i} className="hs" tabIndex={0} role="button"
+                     onClick={()=>{if(h.kind==="zoom"){setZone(null);setLevel(h.to);}else setZone(active?null:h.zk);}}
+                     onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();if(h.kind==="zoom"){setZone(null);setLevel(h.to);}else setZone(active?null:h.zk);}}}>
+                    <path className="hs-fill" d={h.path} fill={active?C.ecaille:(h.kind==="zoom"?C.ecaille:C.lilas)} opacity={active?.4:(h.kind==="zoom"?.08:.14)}/>
+                    <path d={h.path} fill="none" stroke={active?C.ecaille:(h.kind==="zoom"?C.ecaille:C.lilas)} strokeWidth={active?2:1.3} strokeOpacity={active?1:.55} strokeDasharray={h.kind==="zoom"?"4 3":"0"}/>
+                    {h.kind==="zoom"&&<text x={h.cx} y={h.cy+4} textAnchor="middle" fontSize="9" fill={C.ecaille} fontWeight="600">⊕ zoom</text>}
+                    {n!=null&&n>0&&<g><circle cx={h.bx} cy={h.by} r="9" fill={accent} opacity=".92"/><text x={h.bx} y={h.by+4} textAnchor="middle" fontSize="11" fontWeight="700" fill={C.abysse}>{n}</text></g>}
+                  </g>
+                );})}
+              </svg>
+            </div>
+
+            {zone&&(
+              <div className="panel" style={{maxWidth:520,margin:"0 auto",padding:"0 16px"}}>
+                <div style={{background:`linear-gradient(${C.abysse2},${C.violet}33)`,border:`1px solid ${C.ligne}`,borderRadius:22,padding:20,boxShadow:"0 20px 60px rgba(0,0,0,0.4)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <h2 style={{fontFamily:"'Cormorant Garamond', serif",fontStyle:"italic",fontSize:28,margin:0,color:C.nacre}}>{data[zone].label}</h2>
+                    <button onClick={()=>setZone(null)} style={{background:"transparent",border:`1px solid ${C.ligne}`,color:C.lilas,borderRadius:12,width:34,height:34,cursor:"pointer",fontSize:16}}>×</button>
+                  </div>
+                  <p style={{fontSize:11,color:accent,margin:"0 0 8px",letterSpacing:1,textTransform:"uppercase"}}>{isWish?"♡ = je veux":`${mode==="matin"?"☀ Matin":"☾ Soir"} · ✓ = j'utilise`} &nbsp;·&nbsp; ⟳ = à racheter</p>
+                  {data[zone].items.map(it=><ProductRow key={it.id} it={it} zk={zone}/>)}
+                  <button onClick={()=>addItem(zone)} style={{marginTop:14,width:"100%",padding:11,background:"transparent",border:`1px dashed ${C.orchidee}`,color:C.lilas,borderRadius:14,cursor:"pointer",fontSize:13,fontWeight:500}}>+ Ajouter un produit</button>
+                  <p style={{fontSize:11,color:C.lilas,opacity:.6,textAlign:"center",marginTop:10,marginBottom:0}}>Touche le texte pour modifier · la vignette pour une photo</p>
+                </div>
+              </div>
+            )}
+          </>)}
+
+          {screen==="recap"&&(<div className="panel" style={{maxWidth:520,margin:"0 auto",padding:"10px 16px"}}>
+            <h2 style={{fontFamily:"'Cormorant Garamond', serif",fontStyle:"italic",fontSize:26,margin:"6px 0 2px",color:C.nacre}}>Récap {isWish?"wishlist":mode==="matin"?"matin":"soir"}</h2>
+            <p style={{fontSize:12,color:C.lilas,marginTop:0}}>Tous tes produits {selVerb}s.</p>
+            {recap.length===0?<Empty txt="Rien de sélectionné."/>:recap.map(g=>(
+              <div key={g.zk} style={{marginBottom:14}}>
+                <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.ecaille,marginBottom:2}}>{g.label}</div>
+                <div style={{background:`${C.abysse2}aa`,border:`1px solid ${C.ligne}`,borderRadius:16,padding:"2px 16px"}}>{g.items.map(it=><ProductRow key={it.id} it={it} zk={g.zk} showSelect={false}/>)}</div>
+              </div>
+            ))}
+          </div>)}
+
+          {screen==="racheter"&&(<div className="panel" style={{maxWidth:520,margin:"0 auto",padding:"10px 16px"}}>
+            <h2 style={{fontFamily:"'Cormorant Garamond', serif",fontStyle:"italic",fontSize:26,margin:"6px 0 2px",color:C.nacre}}>À racheter</h2>
+            <p style={{fontSize:12,color:C.lilas,marginTop:0}}>Tes produits finis. Touche ⟳ pour retirer une fois racheté.</p>
+            {aRacheter.length===0?<Empty txt="Aucun produit fini."/>:<div style={{background:`${C.abysse2}aa`,border:`1px solid ${C.ligne}`,borderRadius:16,padding:"2px 16px"}}>{aRacheter.map(it=><ProductRow key={it.id} it={it} zk={it.zk} showSelect={false} showZone zlabel={it.zlabel}/>)}</div>}
+          </div>)}
+
+          {screen==="recherche"&&(<div className="panel" style={{maxWidth:520,margin:"0 auto",padding:"10px 16px"}}>
+            <input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher un produit ou une marque…" autoComplete="off" style={{...inp,width:"100%",fontSize:15,padding:"12px 14px"}}/>
+            {query.trim()===""?<Empty txt="Tape le nom d'un produit."/>:results.length===0?<Empty txt={`Aucun résultat pour « ${query} ».`}/>:<div style={{marginTop:12,background:`${C.abysse2}aa`,border:`1px solid ${C.ligne}`,borderRadius:16,padding:"2px 16px"}}>{results.map(it=><ProductRow key={it.id} it={it} zk={it.zk} showZone zlabel={it.zlabel}/>)}</div>}
+          </div>)}
+
+          {screen==="boutique"&&(<div className="panel" style={{maxWidth:560,margin:"0 auto",padding:"10px 16px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+              <button onClick={backToGallery} style={{background:"transparent",border:"none",color:shopBrand?C.lilas:C.nacre,fontSize:13,fontWeight:500,cursor:"pointer",padding:0}}>✦ La galerie</button>
+              {shopBrand&&<span style={{color:C.lilas,opacity:.5}}>›</span>}
+              {shopBrand&&<span style={{color:C.nacre,fontSize:13,fontWeight:500}}>{shopBrand}</span>}
+              {shopBrand&&<div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
+                {!confirmDelete?<button onClick={()=>setConfirmDelete(true)} style={{padding:"5px 11px",borderRadius:10,cursor:"pointer",fontSize:11,border:"1px solid rgba(255,150,150,0.35)",background:"transparent",color:"#e88",fontWeight:500}}>🗑 Supprimer</button>:<><span style={{fontSize:11,color:"#e88"}}>Supprimer la boutique ?</span><button onClick={()=>removeBrand(shopBrand)} style={{padding:"5px 10px",borderRadius:10,cursor:"pointer",fontSize:11,border:"none",background:"#e88",color:C.abysse,fontWeight:700}}>Oui</button><button onClick={()=>setConfirmDelete(false)} style={{padding:"5px 10px",borderRadius:10,cursor:"pointer",fontSize:11,border:`1px solid ${C.ligne}`,background:"transparent",color:C.lilas}}>Non</button></>}
+              </div>}
+            </div>
+            <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:6}}>{["all",...ZONE_ORDER].map(c=>{const on=shopCat===c;return<button key={c} onClick={()=>setShopCat(c)} style={{flexShrink:0,padding:"5px 12px",borderRadius:14,cursor:"pointer",fontSize:12,whiteSpace:"nowrap",border:`1px solid ${on?C.ecaille:C.ligne}`,background:on?`${C.ecaille}22`:"transparent",color:on?C.ecaille:C.lilas}}>{c==="all"?"Tous":CAT_LABEL[c]}</button>;})}</div>
+            {!shopBrand?(<>
+              {brands.length===0?<Empty txt="Aucune boutique."/>:<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>{brands.map(b=>{const visible=shopCat==="all"?b.articles:b.articles.filter(a=>a.cat===shopCat);if(!visible.length)return null;return<button key={b.marque} onClick={()=>{setShopBrand(b.marque);setConfirmDelete(false);}} style={{textAlign:"left",cursor:"pointer",background:`linear-gradient(135deg,${C.violet}44,${C.abysse2})`,border:`1px solid ${C.ligne}`,borderRadius:18,padding:16,color:C.nacre}}><div style={{fontFamily:"'Cormorant Garamond', serif",fontStyle:"italic",fontSize:22,lineHeight:1.1}}>{b.marque}</div><div style={{fontSize:11,color:C.lilas,marginTop:6}}>{visible.length} produit{visible.length>1?"s":""}</div></button>;})}</div>}
+              {!newShop&&<button onClick={()=>setNewShop({marque:"",nom:"",ref:"",cat:shopCat==="all"?"peau":shopCat,prix:""})} style={{marginTop:14,width:"100%",padding:13,background:"transparent",border:`2px dashed ${C.ecaille}`,color:C.ecaille,borderRadius:16,cursor:"pointer",fontSize:13,fontWeight:600}}>✦ Créer une nouvelle boutique</button>}
+            </>):(<>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {shopView.length===0&&<Empty txt="Aucun produit dans ce rayon."/>}
+                {shopView.map(a=>{const added=justAdded===a.id;return<div key={a.id} style={{display:"flex",alignItems:"center",gap:12,background:`${C.abysse2}aa`,border:`1px solid ${C.ligne}`,borderRadius:16,padding:14}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:11,color:C.ecaille,letterSpacing:1,textTransform:"uppercase"}}>{CAT_LABEL[a.cat]}</div><div style={{fontSize:14,fontWeight:500,color:C.nacre}}>{a.nom}</div><div style={{fontSize:12,color:C.lilas,fontWeight:300}}>{a.ref}</div></div><div style={{fontFamily:"'Cormorant Garamond', serif",fontSize:19,color:C.or,fontWeight:500,flexShrink:0}}>{fmt(a.prix)} €</div><button onClick={()=>buyToWishlist(a)} disabled={added} style={{flexShrink:0,padding:"8px 14px",borderRadius:12,cursor:added?"default":"pointer",fontSize:12,fontWeight:600,border:`1px solid ${added?C.ecaille:C.orchidee}`,background:added?`${C.ecaille}33`:C.orchidee,color:added?C.ecaille:C.nacre}}>{added?"Ajouté ♡":"+ Wishlist"}</button></div>;})}
+              </div>
+              {!newShop&&<button onClick={()=>setNewShop({marque:shopBrand,nom:"",ref:"",cat:shopCat==="all"?"peau":shopCat,prix:""})} style={{marginTop:14,width:"100%",padding:12,background:"transparent",border:`1px dashed ${C.orchidee}`,color:C.lilas,borderRadius:14,cursor:"pointer",fontSize:13,fontWeight:500}}>+ Ajouter un produit</button>}
+              {shopView.some(a=>a.perso)&&<div style={{display:"flex",flexWrap:"wrap",gap:6,justifyContent:"center",marginTop:10}}>{shopView.filter(a=>a.perso).map(a=><button key={a.id} onClick={()=>removeShopArticle(a.id)} style={{...btnDel,fontSize:11,padding:"4px 10px"}}>Retirer « {a.nom} »</button>)}</div>}
+            </>)}
+            {newShop&&(<div style={{marginTop:16,background:C.abysse2,border:`1px solid ${C.orchidee}`,borderRadius:16,padding:16}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.nacre,marginBottom:10}}>{shopBrand?`Nouveau produit — ${shopBrand}`:"✦ Créer une nouvelle boutique"}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <input value={newShop.marque} onChange={e=>setNewShop({...newShop,marque:e.target.value})} placeholder="Nom de la boutique / marque" autoComplete="off" style={inp} readOnly={!!shopBrand}/>
+                <input value={newShop.nom} onChange={e=>setNewShop({...newShop,nom:e.target.value})} placeholder="Nom du produit" autoComplete="off" style={inp}/>
+                <input value={newShop.ref} onChange={e=>setNewShop({...newShop,ref:e.target.value})} placeholder="Référence" autoComplete="off" style={inp}/>
+                <div style={{display:"flex",gap:8}}>
+                  <select value={newShop.cat} onChange={e=>setNewShop({...newShop,cat:e.target.value})} style={{...inp,flex:1}}>{ZONE_ORDER.map(c=><option key={c} value={c} style={{background:C.abysse2}}>{CAT_LABEL[c]}</option>)}</select>
+                  <input value={newShop.prix} onChange={e=>setNewShop({...newShop,prix:e.target.value})} placeholder="Prix" inputMode="decimal" autoComplete="off" style={{...inp,width:90}}/>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={addShopArticle} style={{...btnGo,flex:1,padding:"10px 0"}}>{shopBrand?"Ajouter le produit":"Créer la boutique"}</button>
+                  <button onClick={()=>setNewShop(null)} style={{...btnDel,padding:"0 16px"}}>Annuler</button>
+                </div>
+              </div>
+            </div>)}
+          </div>)}
+
+          {screen!=="boutique"&&(
+            <div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(${C.abysse2}ee,${C.abysse}fa)`,backdropFilter:"blur(14px)",borderTop:`1px solid ${C.ligne}`,padding:"16px 20px calc(16px + env(safe-area-inset-bottom))"}}>
+              <div style={{maxWidth:520,margin:"0 auto",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                {screen==="racheter"?(<>
+                  <div><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.or}}>Coût du réassort</div><div style={{fontSize:12,color:C.lilas,fontWeight:300}}>{aRacheter.length} produit{aRacheter.length>1?"s":""} à racheter</div></div>
+                  <div style={{fontFamily:"'Cormorant Garamond', serif",fontSize:34,fontWeight:500,color:C.or}}>{fmt(totalRachat)} €</div>
+                </>):(<>
+                  <div><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:accent}}>{isWish?"Total wishlist":mode==="matin"?"Total rituel matin":"Total rituel soir"}</div><div style={{fontSize:12,color:C.lilas,fontWeight:300}}>{count} produit{count>1?"s":""} {selVerb}{count>1?"s":""}</div></div>
+                  <div style={{fontFamily:"'Cormorant Garamond', serif",fontSize:34,fontWeight:500,color:accent}}>{fmt(total)} €</div>
+                </>)}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function Empty({ txt }) {
+      return <div style={{textAlign:"center",color:"#c89bdb",opacity:.65,fontSize:13,fontWeight:300,padding:"40px 20px"}}>{txt}</div>;
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
